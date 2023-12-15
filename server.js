@@ -2,8 +2,19 @@ const { spawn } = require('child_process');
 const express = require('express');
 const dotenv = require('dotenv');
 const path = require('path');
+const ngrok = require('ngrok');
 
 dotenv.config();
+
+if (!process.env.MAIN_PATH) {
+  console.log('Error: MAIN_PATH not set.');
+  process.exit();
+}
+
+if (!process.env.MODEL_PATH) {
+  console.log('Error: MODEL_PATH not set.');
+  process.exit();
+}
 
 const app = express();
 
@@ -56,6 +67,17 @@ app.post('/prompt', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
+  const token = process.argv[2];
+  if (token) {
+    try {
+      await ngrok.authtoken(token);
+      const url = await ngrok.connect(PORT);
+      console.log(`External URL: ${url}`);
+    } catch (err) {
+      console.log(`Error: invalid ngrok token`);
+      process.exit();
+    }
+  }
 });
