@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Llama.cpp</title>
+    <style>
+      pre {
+        white-space: pre-wrap; /* Since CSS 2.1 */
+        word-wrap: break-word; /* Internet Explorer 5.5+ */
+        overflow-x: auto; /* Optional: for horizontal scrollbar if needed */
+      }
+
+      body {
+        font-family: "Roboto Mono", monospace;
+        background-color: black;
+        color: white;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+
+      #prompt {
+        width: 100%;
+        box-sizing: border-box;
+        margin-bottom: 10px;
+        padding: 10px;
+      }
+
+      #output {
+        color: neon;
+        background-color: black;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        overflow-x: auto;
+        min-height: 200px;
+        padding: 10px;
+        box-sizing: border-box;
+        color: dodgerblue;
+      }
+
+      textarea {
+        background-color: black;
+        resize: vertical;
+        color: white;
+        border: 1px solid;
+        outline: none;
+        height: 100px;
+      }
+
+      button {
+        padding: 5px 10px;
+        cursor: pointer;
+        background-color: black;
+        color: white;
+        border: 1px solid;
+      }
+    </style>
+    <script>
+      function base64ToUtf8(base64) {
+        // Decode base64 to a binary string
+        const binaryString = atob(base64);
+
+        // Create a Uint8Array from the binary string
+        const charList = binaryString.split("");
+        const uintArray = [];
+        for (let i = 0; i < charList.length; i++) {
+          uintArray.push(charList[i].charCodeAt(0));
+        }
+        const uint8Array = new Uint8Array(uintArray);
+
+        // Use TextDecoder to convert Uint8Array to a string
+        const decoder = new TextDecoder("utf-8");
+        return decoder.decode(uint8Array);
+      }
+
+      async function submitPrompt() {
+        const promptText = document.getElementById("prompt").value;
+        const output = document.getElementById("output");
+        output.textContent = ""; // Clear output on new request
+
+        if (!promptText) return;
+
+        const response = await fetch("/prompt", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ prompt: promptText }),
+        });
+
+        const reader = response.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          const decoder = new TextDecoder("utf8");
+          let str = decoder.decode(value);
+          if (done) break;
+
+          if (!output.textContent) {
+            output.textContent += str.slice(1);
+          } else {
+            output.textContent += str;
+          }
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <textarea id="prompt" placeholder="Prompt..."></textarea>
+    <button onclick="submitPrompt()">Submit</button>
+    <pre id="output"></pre>
+  </body>
+</html>

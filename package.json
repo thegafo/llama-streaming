@@ -1,0 +1,16 @@
+{
+  "name": "llama-streaming",
+  "version": "1.0.0",
+  "description": "A simple streaming service for llama videos",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "keywords": [],
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2"
+  }
+}

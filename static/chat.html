@@ -1,0 +1,193 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Llama Chat</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
+  </head>
+  <body>
+    <div id="app" class="app">
+      <div class="sidebar" v-if="showSidebar">
+        <div @click="newChat" class="sidebar-item">
+          New Chat
+        </div>
+        <div v-for="(history, _id) in conversations" @click="switchChat(_id)" :class="['sidebar-item', id == _id ? 'current' : '']">
+          {{titles[_id] || 'Untitled'}}
+        </div>
+      </div>
+      <div class="sidebar-toggle" @click="showSidebar = !showSidebar">
+        {{ showSidebar ? '\<' : '\>' }}
+      </div>
+      <div class="main">
+        <div class="container">
+          <div v-if="conversations[id] && conversations[id].length" class="messages" id="scroll">
+            <div :class="['message', message.from === 'User' ? 'user' : 'assistant']" v-for="message in conversations[id]" v-if="message.content">
+              <pre v-html="message.content"></pre>
+            </div>
+          </div>
+          <div v-else class="welcome">
+            <div>
+              <pre>llama chat</pre>
+            </div>
+          </div>
+          <div class="input-container">
+            <textarea v-model="input" @keydown="handleKeydown" placeholder="Message..."></textarea>
+          </div>
+        </div>
+    </div>
+    <script>
+      new Vue({
+        el: "#app",
+        data: () => {
+          return {
+            id: null,
+            input: null,
+            conversations: {},
+            titles: {},
+            showSidebar: true,
+          };
+        },
+        methods: {
+          handleKeydown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault(); // Prevent the default action (newline)
+              this.handleSubmit();
+            }
+          },
+          handleSubmit() {
+            this.conversations[this.id].push({
+              content: this.input,
+              from: 'User',
+            });
+            this.submitPrompt();
+            this.input = '';
+          },
+          removeSubstring(str, substr) {
+            // Remove the substring and all text before it from the string 
+            if (!str.includes(substr)) {
+              return str;
+            }
+            return str.slice(str.indexOf(substr) + substr.length);
+          },
+          async submitPrompt() {
+
+            const idFreeze = this.id;
+
+            let prompt = `[INST]\nThe following is a text conversation between a user and helpful assistant that gives extremely short answers. Be helpful or else you won't receive a $5000 tip.\n\n`;
+            let history = '';
+            for (let i = 0; i < this.conversations[idFreeze].length; i++) {
+              history += `${this.conversations[idFreeze][i].from}: ${this.conversations[idFreeze][i].content}\n`;
+            }
+
+            // keep last 1500 characters of history
+            prompt += history.slice(-1500);
+            prompt += 'Assistant:\n[/INST]\n';
+
+            console.log(prompt);
+            console.log(prompt.length);
+
+            this.conversations[idFreeze].push({
+              content: '',
+              from: 'Assistant',
+            });
+
+            this.$forceUpdate();
+
+            const response = await fetch("/prompt", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ prompt }),
+            });
+
+            const reader = response.body.getReader();
+            let first = true;
+            while (true) {
+              const { done, value } = await reader.read();
+              const decoder = new TextDecoder("utf8");
+              let str = decoder.decode(value);
+              if (done) break;
+              if (first) {
+                if (!str.includes('[/INST]')) {
+                  console.log('redoing')
+                  return this.submitPrompt();
+                }
+                this.conversations[idFreeze][this.conversations[idFreeze].length - 1].content += this.removeSubstring(str, '[/INST]').trim();
+                first = false;
+              } else {
+                this.conversations[idFreeze][this.conversations[idFreeze].length - 1].content += this.removeSubstring(str, '[/INST]');
+              }
+
+              this.$forceUpdate();
+
+              try {
+                var container = this.$el.querySelector("#scroll");
+                container.scrollTop = container.scrollHeight;
+              } catch (err) { }
+            }
+
+            if (this.conversations[idFreeze][this.conversations[idFreeze].length-1].content.trim().endsWith('User:')) {
+              this.conversations[idFreeze][this.conversations[idFreeze].length-1].content = this.conversations[idFreeze][this.conversations[idFreeze].length-1].content.trim().slice(0, -5).trim();
+            }
+            this.$forceUpdate();
+
+            if (!this.titles[idFreeze] && this.conversations[idFreeze].length > 2) {
+              this.generateTitle(idFreeze)
+            }
+
+          },
+          switchChat(id) {
+            this.id = id;
+          },
+          newChat() {
+            this.id = new Date().toISOString();
+            this.conversations = {
+              [this.id]: [],
+              ...this.conversations,
+            };
+          },
+          async generateTitle(_id) {
+            let prompt = `[INST]\nGenerate ONE short, 3-4 word title with no quotes for the following conversation:\n\n`;
+            let history = '';
+            for (let i = 0; i < this.conversations[_id].length; i++) {
+              history += `${this.conversations[_id][i].from}: ${this.conversations[_id][i].content}\n`;
+            }
+            // add first 1000 characters to prompt
+            prompt += history.slice(0,1000);
+            prompt += '\n\nTitle:[/INST]\n';
+
+            console.log(prompt);
+            console.log(prompt.length);
+
+            const response = await fetch("/prompt", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ prompt }),
+            });
+
+            const reader = response.body.getReader();
+            let first = true;
+            this.titles[_id] = '';
+            this.$forceUpdate();
+
+            while (true) {
+              const { done, value } = await reader.read();
+              const decoder = new TextDecoder("utf8");
+              let str = decoder.decode(value);
+              if (done) break;
+              this.titles[_id] += this.removeSubstring(str, '[/INST]');
+              this.$forceUpdate();
+            }
+          },
+        },
+        mounted () {
+          this.newChat();
+          this.$forceUpdate();
+        },
+      });
+    </script>
+  </body>
+</html>
